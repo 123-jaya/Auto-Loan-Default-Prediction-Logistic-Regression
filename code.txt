@@ -1,0 +1,216 @@
+# ============================================================
+# LOGISTIC REGRESSION – AUTO LOAN ML ANALYSIS (FINAL CLEAN)
+# ============================================================
+
+print("Program Started Successfully\n")
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (confusion_matrix, accuracy_score,
+                             precision_score, recall_score,
+                             f1_score, classification_report,
+                             roc_curve, auc, log_loss,
+                             precision_recall_curve)
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.calibration import calibration_curve
+
+# -----------------------------
+# STEP 1: Create Dataset
+# -----------------------------
+
+data = {
+    "Age_Mid": [20, 22.5, 25.5, 28.5, 31.5, 34.5, 37.5, 40.5, 43.5,
+                46.5, 49.5, 52.5, 55.5, 58.5, 62],
+    "Total_Loans": [9, 310, 511, 4000, 4568, 5698, 8209, 8117, 9000,
+                    7600, 6000, 4000, 2000, 788, 6],
+    "Bad_Loans": [2, 14, 20, 172, 169, 188, 197, 211, 216,
+                  152, 84, 64, 26, 9, 0]
+}
+
+df = pd.DataFrame(data)
+df["Good_Loans"] = df["Total_Loans"] - df["Bad_Loans"]
+df["Bad_Probability"] = df["Bad_Loans"] / df["Total_Loans"]
+
+print("===== GROUPED DATASET =====\n")
+print(df.head())
+print("\nDataset Shape:", df.shape)
+
+# -----------------------------
+# STEP 2: Expand Dataset
+# -----------------------------
+
+X_expanded = []
+y_expanded = []
+
+for _, row in df.iterrows():
+    for i in range(int(row["Bad_Loans"])):
+        X_expanded.append([row["Age_Mid"]])
+        y_expanded.append(1)
+    for i in range(int(row["Good_Loans"])):
+        X_expanded.append([row["Age_Mid"]])
+        y_expanded.append(0)
+
+X_expanded = np.array(X_expanded)
+y_expanded = np.array(y_expanded)
+
+print("\nTotal Records After Expansion:", len(y_expanded))
+
+# -----------------------------
+# STEP 3: Train-Test Split
+# -----------------------------
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_expanded, y_expanded,
+    test_size=0.3,
+    random_state=42,
+    stratify=y_expanded
+)
+
+# -----------------------------
+# STEP 4: Scaling
+# -----------------------------
+
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+
+# -----------------------------
+# STEP 5: Train Model
+# -----------------------------
+
+model = LogisticRegression(max_iter=1000, class_weight='balanced')
+model.fit(X_train, y_train)
+
+# -----------------------------
+# STEP 6: Predictions
+# -----------------------------
+
+y_pred = model.predict(X_test)
+y_prob = model.predict_proba(X_test)[:,1]
+
+# -----------------------------
+# STEP 7: Evaluation
+# -----------------------------
+
+print("\n===== MODEL EVALUATION =====\n")
+
+cm = confusion_matrix(y_test, y_pred)
+print("Confusion Matrix:\n", cm)
+
+print("\nAccuracy:", accuracy_score(y_test, y_pred))
+print("Precision:", precision_score(y_test, y_pred, zero_division=0))
+print("Recall:", recall_score(y_test, y_pred, zero_division=0))
+print("F1 Score:", f1_score(y_test, y_pred, zero_division=0))
+print("\nClassification Report:\n")
+print(classification_report(y_test, y_pred, zero_division=0))
+print("Log Loss:", log_loss(y_test, y_prob))
+
+# -----------------------------
+# 1️⃣ Confusion Matrix Plot
+# -----------------------------
+
+plt.figure()
+plt.imshow(cm)
+plt.title("Confusion Matrix")
+plt.colorbar()
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+
+for i in range(len(cm)):
+    for j in range(len(cm)):
+        plt.text(j, i, cm[i, j], ha="center", va="center")
+
+plt.show()
+
+# -----------------------------
+# 2️⃣ ROC Curve
+# -----------------------------
+
+fpr, tpr, _ = roc_curve(y_test, y_prob)
+roc_auc = auc(fpr, tpr)
+
+plt.figure()
+plt.plot(fpr, tpr)
+plt.plot([0,1],[0,1],'--')
+plt.title("ROC Curve")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.show()
+
+print("AUC Score:", roc_auc)
+
+# -----------------------------
+# 3️⃣ Precision-Recall Curve
+# -----------------------------
+
+precision, recall, _ = precision_recall_curve(y_test, y_prob)
+
+plt.figure()
+plt.plot(recall, precision)
+plt.title("Precision-Recall Curve")
+plt.xlabel("Recall")
+plt.ylabel("Precision")
+plt.show()
+
+# -----------------------------
+# 4️⃣ Probability Distribution
+# -----------------------------
+
+plt.figure()
+plt.hist(y_prob[y_test==0], bins=30, alpha=0.5, label="Good Loans")
+plt.hist(y_prob[y_test==1], bins=30, alpha=0.5, label="Bad Loans")
+plt.title("Probability Distribution by Class")
+plt.xlabel("Predicted Probability")
+plt.ylabel("Frequency")
+plt.legend()
+plt.show()
+
+# -----------------------------
+# 5️⃣ Calibration Curve
+# -----------------------------
+
+prob_true, prob_pred = calibration_curve(y_test, y_prob, n_bins=10)
+
+plt.figure()
+plt.plot(prob_pred, prob_true, marker='o')
+plt.plot([0,1],[0,1],'--')
+plt.title("Calibration Curve")
+plt.xlabel("Mean Predicted Probability")
+plt.ylabel("Fraction of Positives")
+plt.show()
+
+# -----------------------------
+# 6️⃣ Sigmoid Curve (Real Age Axis)
+# -----------------------------
+
+age_range = np.linspace(18, 65, 200).reshape(-1,1)
+age_scaled = scaler.transform(age_range)
+probabilities = model.predict_proba(age_scaled)[:,1]
+
+plt.figure()
+plt.plot(age_range, probabilities)
+plt.axhline(0.5, linestyle='--')
+plt.title("Sigmoid Curve (Age vs Probability)")
+plt.xlabel("Age")
+plt.ylabel("Probability of Bad Loan")
+plt.show()
+
+# -----------------------------
+# STEP 8: Interpretation
+# -----------------------------
+
+print("\n===== MODEL INTERPRETATION =====\n")
+print("Intercept (β0):", model.intercept_)
+print("Coefficient (β1):", model.coef_)
+
+odds_ratio = np.exp(model.coef_)
+print("Odds Ratio:", odds_ratio)
+
+if odds_ratio[0][0] > 1:
+    print("Increasing age increases bad loan risk.")
+else:
+    print("Increasing age decreases bad loan risk.")
